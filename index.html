@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IP角色階段式審核工具</title>
+  <style>
+    :root{
+      --panel-w:380px;--accent:#ee4d2d;--bg:#f3f5f8;--text:#1f2937;--success:#027a48;--danger:#d92d20;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Arial,"Noto Sans TC",sans-serif;color:var(--text);background:var(--bg);overflow:hidden}
+    body{display:grid;grid-template-columns:var(--panel-w) 1fr}
+    
+    /* 側邊欄與頁籤 */
+    .sidebar{background:#fff;border-right:1px solid #d8dde5;display:flex;flex-direction:column;box-shadow:3px 0 14px rgba(0,0,0,.04);z-index:10;height:100vh;overflow:hidden}
+    .sidebar-header{padding:16px 18px 12px;border-bottom:1px solid #eef1f5;flex-shrink:0}
+    h1{font-size:18px;margin:0 0 10px}
+    
+    .stage-tabs{display:flex;gap:4px;background:#f0f3f7;padding:4px;border-radius:10px;margin-bottom:12px}
+    .tab-btn{flex:1;border:0;background:transparent;padding:8px 2px;font-size:12px;font-weight:700;color:#667085;border-radius:7px;cursor:pointer;transition:all .2s;text-align:center}
+    .tab-btn.active{background:#fff;color:var(--accent);box-shadow:0 2px 6px rgba(0,0,0,.08)}
+    .tab-btn.disabled{opacity:0.4;cursor:not-allowed}
+    
+    .sidebar-content{padding:16px 18px;overflow-y:auto;flex:1;min-height:0}
+    .sidebar-content::-webkit-scrollbar{width:7px}
+    .sidebar-content::-webkit-scrollbar-track{background:#f1f3f5;border-radius:4px}
+    .sidebar-content::-webkit-scrollbar-thumb{background:#c1c9d2;border-radius:4px}
+
+    #fileInput{display:none}
+    
+    .section-title{font-size:14px;font-weight:800;margin:14px 0 8px;display:flex;justify-content:space-between;align-items:center}
+    
+    /* 階段一：角色比例列 */
+    .role-row{display:grid;grid-template-columns:22px 16px minmax(50px,1fr) auto 45px;align-items:center;gap:6px;min-height:44px;padding:4px 2px;border-bottom:1px solid #eef1f5}
+    .role-row input[type="checkbox"]{width:17px;height:17px;accent-color:var(--accent)}.swatch{width:13px;height:13px;border-radius:50%}.role-name{font-size:13px;font-weight:700}.role-percent{font-size:12px;text-align:right;color:var(--accent);font-weight:bold;font-variant-numeric:tabular-nums}
+    .shrimp-count-wrap{display:flex;align-items:center;gap:2px;font-size:11px;color:#667085}
+    .shrimp-count-wrap input{width:32px;padding:2px 3px;font-size:11px;border:1px solid #d0d5dd;border-radius:4px;text-align:center}
+
+    .sub-role-item{display:flex;align-items:center;justify-content:space-between;padding:4px 0 4px 38px;font-size:11.5px;color:#475569}
+
+    /* 注意事項紅字高亮樣式 */
+    .notice-box {
+      margin-top: 14px;
+      padding: 12px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--danger);
+    }
+    .notice-title {
+      font-weight: 800;
+      margin-bottom: 6px;
+      color: var(--danger);
+      font-size: 13px;
+    }
+    .notice-list {
+      margin: 0;
+      padding-left: 18px;
+    }
+    .notice-list li {
+      margin-bottom: 4px;
+    }
+    .notice-list li:last-child {
+      margin-bottom: 0;
+    }
+    .notice-list a {
+      color: var(--danger);
+      font-weight: 800;
+      text-decoration: underline;
+    }
+
+    /* 階段二：色彩檢查卡片與部位清單 */
+    .color-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:12px}
+    .color-card-header{font-size:13px;font-weight:bold;display:flex;align-items:center;gap:6px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #edf2f7}
+    .part-row{display:grid;grid-template-columns:70px 1fr 1fr;gap:6px;align-items:center;margin-bottom:8px;padding:4px;background:#fff;border-radius:6px;border:1px solid #f1f5f9}
+    .part-name{font-size:11px;font-weight:bold;color:#475569}
+    .part-box-info{font-size:10px;color:#64748b}
+    .color-preview-bar{height:16px;border-radius:3px;border:1px solid rgba(0,0,0,0.1);display:block;width:100%;margin-top:2px}
+    .color-picker-input{width:100%;height:22px;border:1px solid #cbd5e1;border-radius:3px;cursor:pointer;padding:0;background:none}
+    .part-status{font-size:10px;font-weight:bold;grid-column:1 / -1;text-align:right;margin-top:2px}
+    .part-status.ok{color:var(--success)}
+    .part-status.fail{color:var(--danger)}
+
+    /* 確認機制區塊 */
+    .confirm-box{margin-top:16px;padding:12px;background:#f8fafc;border:1.5px solid #d0d5dd;border-radius:10px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:all .2s}
+    .confirm-box:hover{border-color:var(--accent);background:#fff}
+    .confirm-box.checked{background:#ecfdf3;border-color:#12b76a;color:#027a48}
+    .confirm-box input[type="checkbox"]{width:18px;height:18px;accent-color:#12b76a;cursor:pointer}
+    .confirm-label{font-size:13px;font-weight:800;user-select:none;cursor:pointer}
+
+    .detect-status{font-size:12px;line-height:1.45;padding:9px 10px;border-radius:8px;background:#f7f8fa;color:#667085;margin-bottom:12px}.detect-status.ok{background:#ecfdf3;color:#027a48}
+    .controls{display:grid;gap:8px;margin-top:12px}.controls button{border:1px solid #cfd6df;border-radius:8px;padding:9px;background:#fff;cursor:pointer;font-weight:700;color:#344054;font-size:13px}.controls button:hover{background:#f7f9fc}
+    .btn-primary{background:var(--accent)!important;color:#fff!important;border-color:var(--accent)!important}
+
+    /* 工作畫布與拖拉樣式 */
+    .workspace-wrap{position:relative;min-width:0;min-height:0}
+    .workspace{position:absolute;inset:18px;border:2px dashed #c8d0db;border-radius:16px;background:linear-gradient(45deg,#eef1f5 25%,transparent 25%) 0 0/28px 28px,linear-gradient(45deg,transparent 75%,#eef1f5 75%) 0 0/28px 28px,linear-gradient(45deg,transparent 75%,#eef1f5 75%) 14px -14px/28px 28px,linear-gradient(45deg,#eef1f5 25%,#fff 25%) 14px -14px/28px 28px;overflow:hidden;user-select:none;touch-action:none}
+    .empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:#788397;padding:20px;cursor:pointer}.empty strong{display:block;font-size:20px;color:#4b5563;margin-bottom:8px}
+    #imageLayer{position:absolute;pointer-events:none}#imageLayer img{display:block;width:100%;height:100%;object-fit:contain}.overlay-layer{position:absolute;inset:0}
+    
+    /* 獨立比例圓控制項容器 */
+    .ellipse-group{position:absolute;touch-action:none;transform-origin:center center;cursor:move;z-index:10}
+    
+    .single-circle{
+      width:100%;height:100%;border-radius:50%;
+      border:3px solid var(--role-color);background:var(--role-fill);
+      box-shadow:0 0 0 1px rgba(255,255,255,.88),0 5px 16px rgba(0,0,0,.18);
+    }
+
+    .ellipse-group .label {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      font-weight: 800;
+      font-size: 13px;
+      white-space: nowrap;
+      pointer-events: none;
+      text-align: center;
+      z-index: 15;
+    }
+
+    /* 控制點 */
+    .handle{position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid var(--role-color);box-shadow:0 2px 7px rgba(0,0,0,.28);z-index:12}
+    .handle.nw{left:0;top:0;transform:translate(-50%,-50%);cursor:nwse-resize}
+    .handle.ne{right:0;top:0;transform:translate(50%,50%);cursor:nesw-resize}
+    .handle.se{right:0;bottom:0;transform:translate(50%,50%);cursor:nwse-resize}
+    .handle.sw{left:0;bottom:0;transform:translate(-50%,50%);cursor:nesw-resize}
+    .handle.rot{left:50%;top:-22px;transform:translateX(-50%);cursor:grab;background:var(--role-color);border:2px solid #fff;z-index:13}
+    .handle.rot::after{content:'';position:absolute;top:100%;left:50%;width:2px;height:14px;background:var(--role-color);transform:translateX(-50%);z-index:-1}
+
+    /* 階段三：總覽預覽 Canvas */
+    #summaryContainer{width:100%;height:100%;display:none;align-items:center;justify-content:center;overflow:auto;padding:20px}
+    #summaryCanvas{max-width:100%;max-height:100%;box-shadow:0 10px 30px rgba(0,0,0,0.25);border-radius:8px;background:#fff}
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h1>IP 角色審核工具</h1>
+      <div class="stage-tabs">
+        <button id="tab1" class="tab-btn active" onclick="switchStage(1)">1. 比例檢查</button>
+        <button id="tab2" class="tab-btn disabled" onclick="switchStage(2)">2. 色彩檢查</button>
+        <button id="tab3" class="tab-btn disabled" onclick="switchStage(3)">3. 檢查完成</button>
+      </div>
+      <input id="fileInput" type="file" accept="image/*" />
+      <div id="detectStatus" class="detect-status">請上傳或將圖片拖拉至右側區域。</div>
+    </div>
+    
+    <div class="sidebar-content">
+      <!-- 階段一面板 -->
+      <div id="stage1Panel">
+        <div class="section-title">角色比例控制</div>
+        <div id="roleList"></div>
+
+        <div class="confirm-box" id="stage1ConfirmBox" onclick="toggleStage1Confirm()">
+          <input type="checkbox" id="stage1ConfirmCheck" onclick="event.stopPropagation(); toggleStage1Confirm()" />
+          <label class="confirm-label" for="stage1ConfirmCheck">階段一：比例檢查完成</label>
+        </div>
+
+        <div class="controls">
+          <button id="autoFitRoles" onclick="autoDetectAndFit(true)">自動偵測臉部並貼合比例圓</button>
+          <button id="resetRoles" onclick="resetRolesPositions()">重設角色位置與 100% 大小</button>
+          <button id="fitImage" onclick="fitImageToWorkspace()">圖片置中適配</button>
+        </div>
+
+        <!-- 注意事項 -->
+        <div class="notice-box">
+          <div class="notice-title">注意事項</div>
+          <ol class="notice-list">
+            <li>本工具之「色彩檢查功能」僅供 2D 版本 (純色、有黑框線) 之蝦小編使用，若導入 2.5D 或是 3D 版本蝦小編會有顏色無法準確偵測之情形發生。</li>
+            <li>IP 角色若穿著非規範之「特殊造型服裝」請聯繫對應窗口人工審核。</li>
+            <li>本工具僅供網頁色彩Hex碼檢查 (RGB)，不適用於印刷品校色 (CMYK)，印刷品校色請核對「實體樣品」或是「色票」。</li>
+            <li><a href="https://internal.edu.workatsea.com/internal-edu/category?sub_category_id=672" target="_blank" rel="noopener noreferrer">蝦小編規範</a>可參閱內部教學中心。</li>
+          </ol>
+        </div>
+      </div>
+
+      <!-- 階段二面板 (部位色彩檢查) -->
+      <div id="stage2Panel" style="display:none">
+        <div class="section-title">部位色彩規範 (允許誤差 ≤ 1%)</div>
+        <div id="colorCheckList"></div>
+        
+        <div class="confirm-box" id="stage2ConfirmBox" onclick="toggleStage2Confirm()">
+          <input type="checkbox" id="stage2ConfirmCheck" onclick="event.stopPropagation(); toggleStage2Confirm()" />
+          <label class="confirm-label" for="stage2ConfirmCheck">階段二：色彩檢查完成</label>
+        </div>
+
+        <div class="controls">
+          <button onclick="autoSampleColors(); buildColorCheckList();">🎯 重新自動偵測部位色彩</button>
+        </div>
+      </div>
+
+      <!-- 階段三面板 -->
+      <div id="stage3Panel" style="display:none">
+        <div class="section-title">審核結果導出</div>
+        <p style="font-size:12px;color:#666;line-height:1.4">
+          已將比例標記與整齊的色彩審核報告面板繪製於圖面上，您可以直接下載輸出圖片。
+        </p>
+        
+        <div class="controls" style="margin-top:20px">
+          <button class="btn-primary" onclick="downloadSummaryImage()">📷 另存本次審核結果圖片</button>
+          <button onclick="restartAudit()">🔄 修改後重新審核</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="workspace-wrap">
+    <div id="workspace" class="workspace">
+      <div id="empty" class="empty" onclick="fileInput.click()"><div><strong>拖拉圖片到這裡</strong>或點擊此處選擇圖片上傳</div></div>
+      <div id="imageLayer"><img id="image" alt="審核圖片" /></div>
+      <div id="overlayLayer" class="overlay-layer"></div>
+      
+      <!-- 階段三展示畫布 -->
+      <div id="summaryContainer">
+        <canvas id="summaryCanvas"></canvas>
+      </div>
+    </div>
+  </main>
+
+<script src="face-detect/detector.js"></script>
+<script>
+  let currentStage = 1;
+  let isStage1Confirmed = false;
+  let isStage2Confirmed = false;
+  let isImageLoaded = false;
+  let globalScale = 1.0;
+
+  const workspace=document.getElementById('workspace'),overlayLayer=document.getElementById('overlayLayer'),fileInput=document.getElementById('fileInput'),image=document.getElementById('image'),imageLayer=document.getElementById('imageLayer'),empty=document.getElementById('empty'),roleList=document.getElementById('roleList'),detectStatus=document.getElementById('detectStatus');
+  const summaryContainer=document.getElementById('summaryContainer'),summaryCanvas=document.getElementById('summaryCanvas');
+
+  // 初始化角色清單
+  const defaultRolesConfig=[
+    {
+      name:'蝦小編',refW:182,refH:145,color:'#ED7D46',fill:'rgba(237,125,70,.29)',
+      parts: [
+        { name: '膚色', color: '#ED7D46', sampledColor: '#ED7D46' },
+        { name: '腮紅', color: '#ED8F9F', sampledColor: '#ED8F9F' },
+        { name: '衣服', color: '#FBD942', sampledColor: '#FBD942' }
+      ]
+    },
+    {
+      name:'黑特蝦',refW:182,refH:145,color:'#949494',fill:'rgba(148,148,148,.29)',
+      parts: [
+        { name: '膚色', color: '#949494', sampledColor: '#949494' },
+        { name: 'OK繃(中央)', color: '#BFB291', sampledColor: '#BFB291' },
+        { name: 'OK繃(兩邊)', color: '#D8AC7F', sampledColor: '#D8AC7F' },
+        { name: '衣服', color: '#73C8AE', sampledColor: '#73C8AE' }
+      ]
+    },
+    {
+      name:'蝦醬',refW:176,refH:139,color:'#EE4D2D',fill:'rgba(238,77,45,.30)',
+      parts: [
+        { name: '膚色', color: '#F9C2AA', sampledColor: '#F9C2AA' },
+        { name: '腮紅', color: '#ED8F9F', sampledColor: '#ED8F9F' },
+        { name: '衣服', color: '#EE4D2D', sampledColor: '#EE4D2D' },
+        { name: '頭髮', color: '#642C18', sampledColor: '#642C18' },
+        { name: '幸運草', color: '#009245', sampledColor: '#009245' }
+      ]
+    },
+    {
+      name:'蝦米',refW:79,refH:69,color:'#FFB698',fill:'rgba(255,182,152,.32)',count:1,
+      parts: [
+        { name: '膚色', color: '#FFB698', sampledColor: '#FFB698' },
+        { name: '腮紅', color: '#FF7865', sampledColor: '#FF7865' }
+      ]
+    },
+    {
+      name:'Q醬',refW:145,refH:125,color:'#F46442',fill:'rgba(244,100,66,.30)',
+      parts: [
+        { name: '膚色', color: '#F46442', sampledColor: '#F46442' },
+        { name: '腮紅', color: '#ED8F9F', sampledColor: '#ED8F9F' },
+        { name: '腳底', color: '#FFB698', sampledColor: '#FFB698' }
+      ]
+    }
+  ];
+
+  let roles = [];
+
+  function createRolesData() {
+    return defaultRolesConfig.map((r, id) => {
+      const baseW = r.refW * 0.85;
+      const baseH = r.refH * 0.85;
+      return {
+        ...JSON.parse(JSON.stringify(r)),
+        id, enabled: false, baseW, baseH,
+        instances: [{ x: 0, y: 0, angle: 0, el: null }]
+      };
+    });
+  }
+
+  roles = createRolesData();
+
+  let savedImgOffsetLeft = 0, savedImgOffsetTop = 0, savedImgRenderedWidth = 1, savedImgRenderedHeight = 1;
+
+  // 重置整體狀態至初始階段 1 防呆
+  function resetAllToInit() {
+    isStage1Confirmed = false;
+    isStage2Confirmed = false;
+    globalScale = 1.0;
+
+    document.getElementById('stage1ConfirmCheck').checked = false;
+    document.getElementById('stage1ConfirmBox').classList.remove('checked');
+    document.getElementById('stage2ConfirmCheck').checked = false;
+    document.getElementById('stage2ConfirmBox').classList.remove('checked');
+
+    document.getElementById('tab2').classList.add('disabled');
+    document.getElementById('tab3').classList.add('disabled');
+
+    roles = createRolesData();
+    syncRoleElements();
+    buildRoleList();
+
+    switchStage(1);
+  }
+
+  function handleFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    
+    resetAllToInit();
+
+    const reader = new FileReader();
+    reader.onload = evt => {
+      image.src = evt.target.result;
+      image.onload = () => {
+        isImageLoaded = true;
+        empty.style.display = 'none';
+        imageLayer.style.display = 'block';
+        fitImageToWorkspace();
+        initRolePositions();
+        detectStatus.className = 'detect-status ok';
+        detectStatus.textContent = '圖片已成功載入！請勾選欲審核的角色開始進行第一階段。';
+        setTimeout(() => autoDetectAndFit(false), 0);
+      };
+    };
+    reader.readAsDataURL(file);
+    fileInput.value = '';
+  }
+
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eName => {
+    document.body.addEventListener(eName, e => { e.preventDefault(); e.stopPropagation(); }, false);
+    workspace.addEventListener(eName, e => { e.preventDefault(); e.stopPropagation(); }, false);
+  });
+  workspace.addEventListener('drop', e => { if(e.dataTransfer?.files?.[0]) handleFile(e.dataTransfer.files[0]); }, false);
+  fileInput.addEventListener('change', e => { if(e.target.files?.[0]) handleFile(e.target.files[0]); });
+
+  workspace.addEventListener('wheel', (e) => {
+    if (currentStage !== 1) return;
+    e.preventDefault();
+    const zoomFactor = e.deltaY < 0 ? 1.05 : 0.95;
+    globalScale = Math.min(Math.max(globalScale * zoomFactor, 0.2), 5.0);
+    updateAllRolesScale();
+  }, { passive: false });
+
+  let activeInteraction = null;
+
+  function bindInstanceEvents(role, instIndex) {
+    const inst = role.instances[instIndex];
+    if (!inst || !inst.el) return;
+    const el = inst.el;
+
+    el.addEventListener('pointerdown', (e) => {
+      if (e.target.classList.contains('handle')) return;
+      e.stopPropagation();
+      el.setPointerCapture(e.pointerId);
+
+      activeInteraction = {
+        type: 'move', role, instIndex, startX: e.clientX, startY: e.clientY, initialX: inst.x, initialY: inst.y
+      };
+    });
+
+    const handles = el.querySelectorAll('.handle');
+    handles.forEach(handle => {
+      handle.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        handle.setPointerCapture(e.pointerId);
+
+        const handleType = handle.classList.contains('nw') ? 'nw' :
+                           handle.classList.contains('ne') ? 'ne' :
+                           handle.classList.contains('se') ? 'se' :
+                           handle.classList.contains('sw') ? 'sw' : 'rot';
+
+        activeInteraction = {
+          type: handleType, role, instIndex, startX: e.clientX, startY: e.clientY,
+          initialX: inst.x, initialY: inst.y, initialBaseW: role.baseW, initialScale: globalScale
+        };
+      });
+    });
+  }
+
+  window.addEventListener('pointermove', (e) => {
+    if (!activeInteraction) return;
+    const { type, role, instIndex, startX, startY, initialX, initialY, initialBaseW, initialScale } = activeInteraction;
+    const inst = role.instances[instIndex];
+
+    if (type === 'move') {
+      inst.x = initialX + (e.clientX - startX);
+      inst.y = initialY + (e.clientY - startY);
+      renderInstance(role, instIndex);
+    } else if (type === 'se' || type === 'ne' || type === 'sw' || type === 'nw') {
+      const dx = e.clientX - startX; const dy = e.clientY - startY;
+      let delta = (dx + dy) / 2;
+      if (type === 'nw' || type === 'sw') delta = (-dx + dy) / 2;
+      if (type === 'nw') delta = (-dx - dy) / 2;
+
+      let targetW = Math.max(20, (initialBaseW * initialScale) + delta);
+      globalScale = Math.max(0.2, targetW / initialBaseW);
+      updateAllRolesScale();
+    } else if (type === 'rot') {
+      const rect = inst.el.getBoundingClientRect();
+      const rad = Math.atan2(e.clientY - (rect.top + rect.height / 2), e.clientX - (rect.left + rect.width / 2));
+      inst.angle = rad * (180 / Math.PI) + 90;
+      renderInstance(role, instIndex);
+    }
+  });
+
+  window.addEventListener('pointerup', () => { activeInteraction = null; });
+
+  function updateAllRolesScale() {
+    roles.forEach(role => {
+      role.instances.forEach((_, idx) => renderInstance(role, idx));
+    });
+    roles.forEach(role => {
+      if (role.percentEl) role.percentEl.textContent = `${Math.round(globalScale * 100)}%`;
+    });
+  }
+
+  function renderInstance(role, instIndex) {
+    const inst = role.instances[instIndex];
+    if (!inst || !inst.el) return;
+
+    const w = role.baseW * globalScale;
+    const h = role.baseH * globalScale;
+
+    inst.el.style.left = inst.x + 'px';
+    inst.el.style.top = inst.y + 'px';
+    inst.el.style.width = w + 'px';
+    inst.el.style.height = h + 'px';
+    inst.el.style.transform = `rotate(${inst.angle || 0}deg)`;
+
+    const labelEl = inst.el.querySelector('.label');
+
+    if (labelEl) {
+      const displayName = role.instances.length > 1 ? `${role.name} #${instIndex + 1}` : role.name;
+      labelEl.innerHTML = displayName;
+    }
+  }
+
+  function fitImageToWorkspace() {
+    const wsRect = workspace.getBoundingClientRect();
+    const padding = 20;
+    const maxW = wsRect.width - padding * 2;
+    const maxH = wsRect.height - padding * 2;
+    const imgW = image.naturalWidth || 800;
+    const imgH = image.naturalHeight || 600;
+
+    const ratio = Math.min(maxW / imgW, maxH / imgH, 1);
+    const renderW = imgW * ratio;
+    const renderH = imgH * ratio;
+
+    imageLayer.style.width = renderW + 'px';
+    imageLayer.style.height = renderH + 'px';
+    imageLayer.style.left = (wsRect.width - renderW) / 2 + 'px';
+    imageLayer.style.top = (wsRect.height - renderH) / 2 + 'px';
+  }
+
+  // ===== 自動偵測臉部並貼合比例圓（使用 face-detect/detector.js，純前端） =====
+  function hexToRgb(hex) {
+    return [parseInt(hex.substr(1, 2), 16), parseInt(hex.substr(3, 2), 16), parseInt(hex.substr(5, 2), 16)];
+  }
+
+  // 取臉部中心附近的平均顏色，用來分辨同為橘色的 Q醬 / 蝦小編
+  function sampleFaceColor(ctx, face) {
+    const rad = Math.max(2, Math.round(face.r * 0.5));
+    const x0 = Math.max(0, face.cx - rad), y0 = Math.max(0, face.cy - rad);
+    const w = Math.min(ctx.canvas.width - x0, rad * 2), h = Math.min(ctx.canvas.height - y0, rad * 2);
+    if (w <= 0 || h <= 0) return null;
+    const d = ctx.getImageData(x0, y0, w, h).data;
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let i = 0; i < d.length; i += 16) {
+      const R = d[i], G = d[i + 1], B = d[i + 2];
+      if (d[i + 3] < 128) continue;
+      if (R < 60 && G < 60 && B < 60) continue;          // 眼睛 / 嘴巴
+      if (R > 245 && G > 245 && B > 245) continue;       // 高光
+      r += R; g += G; b += B; n++;
+    }
+    return n ? [r / n, g / n, b / n] : null;
+  }
+
+  function colorDist(a, b) {
+    return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  }
+
+  // 把偵測結果分派給角色：回傳 Map<roleName, face[]>
+  function assignFacesToRoles(faces, ctx) {
+    const byName = {};
+    const push = (name, f) => { (byName[name] = byName[name] || []).push(f); };
+    const biggest = arr => arr.slice().sort((a, b) => b.r - a.r)[0];
+
+    const orange = faces.filter(f => f.type === 'orange');
+    const gray = faces.filter(f => f.type === 'gray');
+    const skin = faces.filter(f => f.type === 'skin');
+
+    // 橘色大頭：只取最大的一顆，依膚色比對決定 Q醬 或 蝦小編
+    let bigHead = null;
+    if (orange.length) {
+      bigHead = biggest(orange);
+      const q = roles.find(r => r.name === 'Q醬'), x = roles.find(r => r.name === '蝦小編');
+      const mean = ctx ? sampleFaceColor(ctx, bigHead) : null;
+      let name = 'Q醬';
+      if (mean && q && x) {
+        const dq = colorDist(mean, hexToRgb(q.parts[0].color));
+        const dx = colorDist(mean, hexToRgb(x.parts[0].color));
+        name = dx < dq ? '蝦小編' : 'Q醬';
+      }
+      push(name, bigHead);
+    }
+    // 灰色頭：黑特蝦，取最大的一顆
+    if (gray.length) {
+      const g = biggest(gray);
+      push('黑特蝦', g);
+      if (!bigHead || g.r > bigHead.r) bigHead = g;
+    }
+    // 膚色：接近大頭尺寸的是蝦醬，其餘為蝦米
+    if (skin.length) {
+      const sorted = skin.slice().sort((a, b) => b.r - a.r);
+      let girl = null;
+      if (bigHead) {
+        if (sorted[0].r >= bigHead.r * 0.6) girl = sorted[0];
+      } else if (sorted.length > 1 && sorted[sorted.length - 1].r < sorted[0].r * 0.7) {
+        girl = sorted[0];
+      }
+      sorted.forEach(f => push(f === girl ? '蝦醬' : '蝦米', f));
+    }
+    return byName;
+  }
+
+  function autoDetectAndFit(manual) {
+    if (!isImageLoaded || !image.naturalWidth) {
+      if (manual) { detectStatus.className = 'detect-status'; detectStatus.textContent = '請先上傳或拖拉圖片，再執行自動偵測。'; }
+      return;
+    }
+    if (!window.IPFaceDetector) {
+      detectStatus.className = 'detect-status';
+      detectStatus.textContent = '找不到 face-detect/detector.js，無法自動偵測，請手動擺放比例圓。';
+      return;
+    }
+
+    detectStatus.className = 'detect-status';
+    detectStatus.textContent = '自動偵測臉部中…';
+
+    let faces = [];
+    try {
+      faces = IPFaceDetector.detectFromImage(image);
+    } catch (err) {
+      console.error(err);
+      detectStatus.textContent = '自動偵測失敗，請手動擺放比例圓。';
+      return;
+    }
+
+    if (!faces.length) {
+      detectStatus.className = 'detect-status';
+      detectStatus.textContent = '未偵測到角色臉部（閉眼、3D 或非標準畫風可能抓不到），請手動勾選並擺放比例圓。';
+      return;
+    }
+
+    // 原圖像素 → workspace 像素
+    const k = (imageLayer.offsetWidth || 1) / image.naturalWidth;
+    const ox = imageLayer.offsetLeft, oy = imageLayer.offsetTop;
+
+    const sampleCanvas = document.createElement('canvas');
+    sampleCanvas.width = image.naturalWidth; sampleCanvas.height = image.naturalHeight;
+    const sctx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+    sctx.drawImage(image, 0, 0);
+
+    const assigned = assignFacesToRoles(faces, sctx);
+
+    // 全域比例：以最可靠的大頭為基準，其餘角色沿用規範中的相對尺寸
+    const refOrder = ['蝦小編', 'Q醬', '黑特蝦', '蝦醬', '蝦米'];
+    let newScale = null;
+    for (const name of refOrder) {
+      const list = assigned[name];
+      if (!list || !list.length) continue;
+      const role = roles.find(r => r.name === name);
+      const avgW = list.reduce((s, f) => s + f.w, 0) / list.length;
+      newScale = (avgW * k) / role.baseW;
+      break;
+    }
+    if (newScale) globalScale = Math.min(Math.max(newScale, 0.2), 5.0);
+
+    // 啟用與數量
+    roles.forEach(role => {
+      const list = assigned[role.name];
+      role.enabled = !!(list && list.length);
+      if (role.name === '蝦米') {
+        const n = list ? list.length : 1;
+        role.count = n;
+        role.instances = Array.from({ length: n }, (_, i) => role.instances[i] || { x: 50, y: 50, angle: 0, el: null });
+      }
+    });
+
+    // 位置：圓心對齊臉部外框中心
+    roles.forEach(role => {
+      const list = assigned[role.name];
+      if (!list) return;
+      const w = role.baseW * globalScale, h = role.baseH * globalScale;
+      role.instances.forEach((inst, i) => {
+        const f = list[i]; if (!f) return;
+        inst.x = (f.x + f.w / 2) * k + ox - w / 2;
+        inst.y = (f.y + f.h / 2) * k + oy - h / 2;
+        inst.angle = 0;
+        inst.face = { x: f.x, y: f.y, w: f.w, h: f.h, score: f.score };
+      });
+    });
+
+    syncRoleElements();
+    buildRoleList();
+    updateAllRolesScale();
+
+    const summary = roles.filter(r => r.enabled).map(r => `${r.name} ×${r.instances.length}`).join('、');
+    detectStatus.className = 'detect-status ok';
+    detectStatus.textContent = `自動偵測完成：${summary}，比例 ${Math.round(globalScale * 100)}%。未抓到或誤判的角色請手動勾選、拖拉調整。`;
+  }
+
+  function resetRolesPositions() {
+    globalScale = 1.0;
+    initRolePositions();
+  }
+
+  function initRolePositions() {
+    const imgRect = imageLayer.getBoundingClientRect();
+    const wsRect = workspace.getBoundingClientRect();
+    const startLeft = imgRect.left - wsRect.left;
+    const startTop = imgRect.top - wsRect.top;
+
+    let globalIndex = 0;
+    roles.forEach(role => {
+      role.instances.forEach((inst, idx) => {
+        inst.x = Math.max(10, startLeft + 20 + globalIndex * 35);
+        inst.y = Math.max(10, startTop + 20 + globalIndex * 15);
+        inst.angle = 0;
+        renderInstance(role, idx);
+        globalIndex++;
+      });
+    });
+  }
+
+  function syncRoleElements() {
+    overlayLayer.innerHTML = '';
+    roles.forEach(role => {
+      role.instances.forEach((inst, idx) => {
+        const el = document.createElement('div');
+        el.className = 'ellipse-group';
+        el.style.setProperty('--role-color', role.color);
+        el.style.setProperty('--role-fill', role.fill);
+        el.style.display = role.enabled ? 'block' : 'none';
+        
+        el.innerHTML = `
+          <div class="single-circle"></div>
+          <div class="label"></div>
+          <div class="handle nw"></div>
+          <div class="handle ne"></div>
+          <div class="handle se"></div>
+          <div class="handle sw"></div>
+          <div class="handle rot"></div>
+        `;
+        
+        overlayLayer.appendChild(el);
+        inst.el = el;
+        bindInstanceEvents(role, idx);
+        renderInstance(role, idx);
+      });
+    });
+  }
+
+  function setRoleCount(role, newCount) {
+    newCount = Math.max(1, newCount);
+    role.count = newCount;
+    const currentCount = role.instances.length;
+
+    if (newCount > currentCount) {
+      for (let i = currentCount; i < newCount; i++) {
+        const lastInst = role.instances[currentCount - 1] || { x: 50, y: 50 };
+        role.instances.push({
+          x: lastInst.x + 30, y: lastInst.y + 30, angle: 0, el: null
+        });
+      }
+    } else if (newCount < currentCount) {
+      role.instances.splice(newCount);
+    }
+
+    syncRoleElements();
+    buildRoleList();
+  }
+
+  function buildRoleList(){
+    roleList.innerHTML = '';
+    roles.forEach(role => {
+      const container = document.createElement('div');
+      
+      const isShrimp = role.name === '蝦米';
+      const countControl = isShrimp ? `
+        <div class="shrimp-count-wrap">
+          <span>×</span>
+          <input type="number" id="shrimpCountInput" value="${role.count || 1}" min="1" max="99" />
+        </div>
+      ` : '<span></span>';
+
+      const isMulti = role.instances.length > 1;
+
+      const row = document.createElement('div');
+      row.className = 'role-row';
+      row.innerHTML = `
+        <input type="checkbox" ${role.enabled ? 'checked' : ''} data-role-check="${role.id}">
+        <span class="swatch" style="background:${role.color}"></span>
+        <span class="role-name">${role.name}</span>
+        ${countControl}
+        <span class="role-percent">${Math.round(globalScale * 100)}%</span>
+      `;
+      container.appendChild(row);
+
+      if (isMulti) {
+        role.instances.forEach((inst, idx) => {
+          const subRow = document.createElement('div');
+          subRow.className = 'sub-role-item';
+          subRow.innerHTML = `<span>蝦米 #${idx + 1}</span>`;
+          container.appendChild(subRow);
+        });
+      }
+
+      roleList.appendChild(container);
+      role.percentEl = row.querySelector('.role-percent');
+    });
+
+    const countInput = document.getElementById('shrimpCountInput');
+    if(countInput) {
+      countInput.addEventListener('input', (e) => {
+        const shrimp = roles.find(r => r.name === '蝦米');
+        if(shrimp) {
+          setRoleCount(shrimp, parseInt(e.target.value) || 1);
+        }
+      });
+    }
+
+    roleList.addEventListener('change', e => {
+      const input = e.target.closest('[data-role-check]'); if(!input) return;
+      const role = roles[+input.dataset.roleCheck];
+      role.enabled = input.checked;
+      role.instances.forEach(inst => {
+        if(inst.el) inst.el.style.display = role.enabled ? 'block' : 'none';
+      });
+    });
+  }
+
+  function autoSampleColors() {
+    if (!isImageLoaded || !image.naturalWidth) return;
+
+    const sampleCanvas = document.createElement('canvas');
+    sampleCanvas.width = image.naturalWidth;
+    sampleCanvas.height = image.naturalHeight;
+    const ctx = sampleCanvas.getContext('2d');
+    ctx.drawImage(image, 0, 0);
+
+    const imgRenderW = imageLayer.offsetWidth || 1;
+    const imgRenderH = imageLayer.offsetHeight || 1;
+    const scaleX = image.naturalWidth / imgRenderW;
+    const scaleY = image.naturalHeight / imgRenderH;
+
+    roles.forEach(role => {
+      if (!role.enabled) return;
+
+      const inst = role.instances[0];
+      if (!inst) return;
+
+      const roleW = role.baseW * globalScale * scaleX;
+      const roleH = role.baseH * globalScale * scaleY;
+      const startX = Math.max(0, Math.round((inst.x - imageLayer.offsetLeft) * scaleX));
+      const startY = Math.max(0, Math.round((inst.y - imageLayer.offsetTop) * scaleY));
+      const width = Math.min(Math.round(roleW), image.naturalWidth - startX);
+      const height = Math.min(Math.round(roleH), image.naturalHeight - startY);
+
+      if (width <= 0 || height <= 0) return;
+
+      const imgData = ctx.getImageData(startX, startY, width, height).data;
+
+      role.parts.forEach(part => {
+        let minDistance = Infinity;
+        let bestColor = part.color;
+
+        const targetR = parseInt(part.color.substring(1,3), 16) || 0;
+        const targetG = parseInt(part.color.substring(3,5), 16) || 0;
+        const targetB = parseInt(part.color.substring(5,7), 16) || 0;
+
+        for (let y = 0; y < height; y += 2) {
+          for (let x = 0; x < width; x += 2) {
+            const idx = (y * width + x) * 4;
+            const r = imgData[idx];
+            const g = imgData[idx + 1];
+            const b = imgData[idx + 2];
+            const a = imgData[idx + 3];
+
+            if (a < 128) continue;
+            if (r < 25 && g < 25 && b < 25) continue; 
+            if (r > 250 && g > 250 && b > 250) continue; 
+
+            const dist = Math.sqrt(
+              Math.pow(r - targetR, 2) +
+              Math.pow(g - targetG, 2) +
+              Math.pow(b - targetB, 2)
+            );
+
+            if (dist < minDistance) {
+              minDistance = dist;
+              bestColor = `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase()}`;
+            }
+          }
+        }
+
+        part.sampledColor = bestColor;
+      });
+    });
+  }
+
+  function buildColorCheckList() {
+    const container = document.getElementById('colorCheckList');
+    container.innerHTML = '';
+
+    roles.forEach(role => {
+      if (!role.enabled) return;
+
+      const card = document.createElement('div');
+      card.className = 'color-card';
+
+      let partsHTML = '';
+      role.parts.forEach((part, partIdx) => {
+        partsHTML += `
+          <div class="part-row">
+            <span class="part-name">${part.name}</span>
+            <div>
+              <div class="part-box-info">規範: ${part.color}</div>
+              <span class="color-preview-bar" style="background:${part.color}"></span>
+            </div>
+            <div>
+              <div class="part-box-info">自動吸色/微調:</div>
+              <input type="color" class="color-picker-input" value="${part.sampledColor || part.color}" data-role-id="${role.id}" data-part-idx="${partIdx}">
+            </div>
+            <div class="part-status ok" id="partStatus-${role.id}-${partIdx}">✓ 顏色符合規範 (誤差 < 1%)</div>
+          </div>
+        `;
+      });
+
+      card.innerHTML = `
+        <div class="color-card-header">
+          <span class="swatch" style="background:${role.color}"></span>
+          ${role.name} 部位色彩檢測
+        </div>
+        ${partsHTML}
+      `;
+      container.appendChild(card);
+      
+      role.parts.forEach((_, partIdx) => updatePartDiffUI(role.id, partIdx));
+    });
+
+    container.querySelectorAll('.color-picker-input').forEach(input => {
+      input.addEventListener('input', (e) => {
+        const rId = +e.target.dataset.roleId;
+        const pIdx = +e.target.dataset.partIdx;
+        const role = roles.find(r => r.id === rId);
+        if (role && role.parts[pIdx]) {
+          role.parts[pIdx].sampledColor = e.target.value.toUpperCase();
+          updatePartDiffUI(rId, pIdx);
+        }
+      });
+    });
+  }
+
+  function getHexDiff(c1Hex, c2Hex) {
+    const hexToRgb = hex => {
+      const c = hex.replace('#','');
+      return {
+        r: parseInt(c.substring(0,2),16) || 0,
+        g: parseInt(c.substring(2,4),16) || 0,
+        b: parseInt(c.substring(4,6),16) || 0
+      };
+    };
+    const c1 = hexToRgb(c1Hex);
+    const c2 = hexToRgb(c2Hex);
+    return Math.sqrt(Math.pow(c1.r - c2.r, 2) + Math.pow(c1.g - c2.g, 2) + Math.pow(c1.b - c2.b, 2));
+  }
+
+  function getPartErrorPercent(part) {
+    const dist = getHexDiff(part.color, part.sampledColor || part.color);
+    return (dist / 441.67) * 100;
+  }
+
+  function updatePartDiffUI(roleId, partIdx) {
+    const role = roles.find(r => r.id === roleId);
+    if (!role || !role.parts[partIdx]) return;
+    const part = role.parts[partIdx];
+    
+    const statusEl = document.getElementById(`partStatus-${roleId}-${partIdx}`);
+    if (!statusEl) return;
+
+    const errorRatioPercent = getPartErrorPercent(part);
+
+    if (errorRatioPercent <= 1.0) {
+      statusEl.className = 'part-status ok';
+      statusEl.textContent = '✓ 顏色符合規範 (誤差 ≤ 1%)';
+    } else {
+      statusEl.className = 'part-status fail';
+      statusEl.textContent = `⚠ 顏色不符合規範 (誤差 ${errorRatioPercent.toFixed(1)}%)`;
+    }
+  }
+
+  function validateStage1() {
+    if (!isImageLoaded) {
+      return { valid: false, message: '請先上傳待審核圖片，才能完成第一階段！' };
+    }
+    const hasCheckedRole = roles.some(r => r.enabled);
+    if (!hasCheckedRole) {
+      return { valid: false, message: '請至少勾選一個角色進行比例檢查！' };
+    }
+    return { valid: true };
+  }
+
+  function validateStage2() {
+    const stage1Val = validateStage1();
+    if (!stage1Val.valid) return stage1Val;
+
+    let hasFail = false;
+    let failedDetail = [];
+
+    roles.forEach(role => {
+      if (!role.enabled) return;
+      role.parts.forEach(part => {
+        const err = getPartErrorPercent(part);
+        if (err > 1.0) {
+          hasFail = true;
+          failedDetail.push(`${role.name}-${part.name} (誤差 ${err.toFixed(1)}%)`);
+        }
+      });
+    });
+
+    if (hasFail) {
+      return {
+        valid: false,
+        message: `色彩檢查未通過！以下部位誤差超過 1%：\n• ${failedDetail.join('\n• ')}\n\n請調整吸色或修正後再進下一階段。\n\n詳情請參閱 「內部教學中心 ➔ 3 蝦小編規範 ➔ 03.角色設計」`
+      };
+    }
+
+    return { valid: true };
+  }
+
+  function toggleStage1Confirm() {
+    const check = document.getElementById('stage1ConfirmCheck');
+    const validation = validateStage1();
+
+    if (!validation.valid) {
+      check.checked = false;
+      isStage1Confirmed = false;
+      document.getElementById('stage1ConfirmBox').classList.remove('checked');
+      document.getElementById('tab2').classList.add('disabled');
+      alert(validation.message);
+      return;
+    }
+
+    isStage1Confirmed = check.checked;
+    document.getElementById('stage1ConfirmBox').classList.toggle('checked', isStage1Confirmed);
+    document.getElementById('tab2').classList.toggle('disabled', !isStage1Confirmed);
+  }
+
+  function toggleStage2Confirm() {
+    const check = document.getElementById('stage2ConfirmCheck');
+    
+    if (!isStage1Confirmed) {
+      check.checked = false;
+      isStage2Confirmed = false;
+      alert('請先正確完成第一階段比例檢查！');
+      return;
+    }
+
+    const validation = validateStage2();
+
+    if (!validation.valid) {
+      check.checked = false;
+      isStage2Confirmed = false;
+      document.getElementById('stage2ConfirmBox').classList.remove('checked');
+      document.getElementById('tab3').classList.add('disabled');
+      alert(validation.message);
+      return;
+    }
+
+    isStage2Confirmed = check.checked;
+    document.getElementById('stage2ConfirmBox').classList.toggle('checked', isStage2Confirmed);
+    document.getElementById('tab3').classList.toggle('disabled', !isStage2Confirmed);
+  }
+
+  function switchStage(stage) {
+    if (stage === 2) {
+      const v1 = validateStage1();
+      if (!v1.valid) return alert(v1.message);
+      if (!isStage1Confirmed) return alert('請先勾選確認「階段一：比例檢查完成」！');
+      autoSampleColors();
+      buildColorCheckList();
+    }
+
+    if (stage === 3) {
+      const v1 = validateStage1();
+      if (!v1.valid) return alert(v1.message);
+      if (!isStage1Confirmed) return alert('請先完成第一階段比例檢查！');
+
+      const v2 = validateStage2();
+      if (!v2.valid) return alert(v2.message);
+      if (!isStage2Confirmed) return alert('請先勾選確認「階段二：色彩檢查完成」！');
+      
+      savedImgOffsetLeft = imageLayer.offsetLeft;
+      savedImgOffsetTop = imageLayer.offsetTop;
+      savedImgRenderedWidth = imageLayer.offsetWidth || 1;
+      savedImgRenderedHeight = imageLayer.offsetHeight || 1;
+    }
+
+    currentStage = stage;
+    document.getElementById('tab1').classList.toggle('active', stage===1);
+    document.getElementById('tab2').classList.toggle('active', stage===2);
+    document.getElementById('tab3').classList.toggle('active', stage===3);
+
+    document.getElementById('stage1Panel').style.display = stage===1 ? 'block' : 'none';
+    document.getElementById('stage2Panel').style.display = stage===2 ? 'block' : 'none';
+    document.getElementById('stage3Panel').style.display = stage===3 ? 'block' : 'none';
+
+    if(stage === 3) {
+      imageLayer.style.display = 'none';
+      overlayLayer.style.display = 'none';
+      summaryContainer.style.display = 'flex';
+      setTimeout(renderStage3Summary, 50);
+    } else {
+      imageLayer.style.display = 'block';
+      overlayLayer.style.display = stage===1 ? 'block' : 'none';
+      summaryContainer.style.display = 'none';
+    }
+  }
+
+  function renderStage3Summary() {
+    if (!image.naturalWidth) return;
+    const ctx = summaryCanvas.getContext('2d');
+    const imgWidth = image.naturalWidth;
+    const imgHeight = image.naturalHeight;
+    summaryCanvas.width = imgWidth;
+    summaryCanvas.height = imgHeight;
+
+    ctx.drawImage(image, 0, 0, imgWidth, imgHeight);
+
+    const scaleX = imgWidth / savedImgRenderedWidth;
+    const scaleY = imgHeight / savedImgRenderedHeight;
+    const avgScale = (scaleX + scaleY) / 2;
+
+    roles.forEach(role => {
+      if(!role.enabled) return;
+
+      const singleW = role.baseW * globalScale * scaleX;
+      const singleH = role.baseH * globalScale * scaleY;
+
+      role.instances.forEach((inst, idx) => {
+        const roleCenterX = inst.x + (role.baseW * globalScale) / 2;
+        const roleCenterY = inst.y + (role.baseH * globalScale) / 2;
+        const canvasCX = (roleCenterX - savedImgOffsetLeft) * scaleX;
+        const canvasCY = (roleCenterY - savedImgOffsetTop) * scaleY;
+
+        ctx.save();
+        ctx.translate(canvasCX, canvasCY);
+        ctx.rotate(((inst.angle || 0) * Math.PI) / 180);
+
+        ctx.beginPath();
+        ctx.ellipse(0, 0, singleW/2, singleH/2, 0, 0, 2 * Math.PI);
+        ctx.fillStyle = role.fill;
+        ctx.fill();
+        ctx.lineWidth = Math.max(3, Math.round(4 * avgScale));
+        ctx.strokeStyle = role.color;
+        ctx.stroke();
+
+        const displayName = role.instances.length > 1 ? `${role.name} #${idx + 1}` : role.name;
+        const fontTitleSize = Math.max(14, Math.round(15 * avgScale));
+        ctx.font = `bold ${fontTitleSize}px "Noto Sans TC", Arial, sans-serif`;
+        const titleWidth = ctx.measureText(displayName).width;
+        const titlePadding = 12 * avgScale;
+        const titleBoxH = 32 * avgScale;
+
+        ctx.fillStyle = "rgba(0,0,0,0.85)";
+        ctx.fillRect(-titleWidth/2 - titlePadding, -titleBoxH / 2, titleWidth + titlePadding * 2, titleBoxH);
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(displayName, 0, 0);
+
+        ctx.restore();
+      });
+    });
+
+    let reportData = [];
+    roles.forEach(role => {
+      if (!role.enabled) return;
+      let roleItem = {
+        roleName: role.name,
+        roleColor: role.color,
+        parts: []
+      };
+      role.parts.forEach(part => {
+        const errRatio = getPartErrorPercent(part);
+        const isOk = errRatio <= 1.0;
+        roleItem.parts.push({
+          name: part.name,
+          targetColor: part.color,
+          sampledColor: part.sampledColor || part.color,
+          isOk: isOk,
+          errRatio: errRatio
+        });
+      });
+      reportData.push(roleItem);
+    });
+
+    if (reportData.length > 0) {
+      const panelPadding = Math.max(14, Math.round(18 * avgScale));
+      const fontHeaderSize = Math.max(15, Math.round(16 * avgScale));
+      const fontRoleSize = Math.max(13, Math.round(14 * avgScale));
+      const fontDetailSize = Math.max(11, Math.round(12.5 * avgScale));
+      const lineHeight = Math.max(22, Math.round(24 * avgScale));
+      const iconSize = Math.max(10, Math.round(11 * avgScale));
+
+      const drawPanel = (x, y, width, height, items, titleText) => {
+        ctx.save();
+        ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+        ctx.lineWidth = Math.max(1, 1.5 * avgScale);
+
+        const r = 10 * avgScale;
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + width - r, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+        ctx.lineTo(x + width, y + height - r);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+        ctx.lineTo(x + r, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        let currentY = y + panelPadding + fontHeaderSize / 2;
+        ctx.font = `bold ${fontHeaderSize}px "Noto Sans TC", Arial, sans-serif`;
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(titleText, x + panelPadding, currentY);
+
+        currentY += lineHeight * 0.8;
+
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+        ctx.beginPath();
+        ctx.moveTo(x + panelPadding, currentY);
+        ctx.lineTo(x + width - panelPadding, currentY);
+        ctx.stroke();
+
+        currentY += lineHeight * 0.6;
+
+        items.forEach(rItem => {
+          ctx.font = `bold ${fontRoleSize}px "Noto Sans TC", Arial, sans-serif`;
+          ctx.fillStyle = rItem.roleColor;
+          ctx.fillText(`● ${rItem.roleName}`, x + panelPadding, currentY);
+          currentY += lineHeight;
+
+          rItem.parts.forEach(p => {
+            ctx.font = `normal ${fontDetailSize}px "Noto Sans TC", Arial, sans-serif`;
+            const swatchX = x + panelPadding + (12 * avgScale);
+
+            ctx.fillStyle = p.sampledColor;
+            ctx.fillRect(swatchX, currentY - iconSize/2, iconSize, iconSize);
+            ctx.strokeStyle = "rgba(255,255,255,0.4)";
+            ctx.strokeRect(swatchX, currentY - iconSize/2, iconSize, iconSize);
+
+            const textX = swatchX + iconSize + (8 * avgScale);
+            ctx.fillStyle = p.isOk ? "#ffffff" : "#f87171";
+            const statusStr = p.isOk ? "✓" : `(超標 ${p.errRatio.toFixed(1)}%)`;
+            const detailText = `${p.name}: 規範${p.targetColor} ➔ 實測${p.sampledColor} ${statusStr}`;
+            
+            ctx.fillText(detailText, textX, currentY);
+            currentY += lineHeight * 0.9;
+          });
+
+          currentY += lineHeight * 0.3;
+        });
+
+        ctx.restore();
+      };
+
+      ctx.font = `normal ${fontDetailSize}px "Noto Sans TC", Arial, sans-serif`;
+      let maxTextWidth = 160 * avgScale;
+      reportData.forEach(r => {
+        r.parts.forEach(p => {
+          const statusStr = p.isOk ? "✓" : `(超標 ${p.errRatio.toFixed(1)}%)`;
+          const detailText = `${p.name}: 規範${p.targetColor} ➔ 實測${p.sampledColor} ${statusStr}`;
+          const w = ctx.measureText(detailText).width;
+          if (w > maxTextWidth) maxTextWidth = w;
+        });
+      });
+
+      const panelW = maxTextWidth + (55 * avgScale);
+
+      let totalLines = 0;
+      reportData.forEach(r => {
+        totalLines += 1;
+        totalLines += r.parts.length * 0.9;
+        totalLines += 0.3;
+      });
+      const estimatedH = (panelPadding * 2) + (fontHeaderSize) + (lineHeight * 1.4) + (totalLines * lineHeight);
+      const maxPanelH = imgHeight - (40 * avgScale);
+
+      if (estimatedH <= maxPanelH || reportData.length <= 2) {
+        drawPanel(20 * avgScale, 20 * avgScale, panelW, Math.min(estimatedH, maxPanelH), reportData, "📋 色彩規範審核報告");
+      } else {
+        const mid = Math.ceil(reportData.length / 2);
+        const leftData = reportData.slice(0, mid);
+        const rightData = reportData.slice(mid);
+
+        const panelXLeft = 20 * avgScale;
+        const panelXRight = imgWidth - panelW - (20 * avgScale);
+
+        drawPanel(panelXLeft, 20 * avgScale, panelW, maxPanelH, leftData, "📋 色彩審核報告 (1/2)");
+        drawPanel(panelXRight, 20 * avgScale, panelW, maxPanelH, rightData, "📋 色彩審核報告 (2/2)");
+      }
+    }
+  }
+
+  function downloadSummaryImage() {
+    const link = document.createElement('a');
+    link.download = `IP角色審核結果報告_${new Date().toISOString().slice(0,10)}.png`;
+    link.href = summaryCanvas.toDataURL('image/png');
+    link.click();
+  }
+
+  function restartAudit() {
+    resetAllToInit();
+  }
+
+  // 初始化執行
+  syncRoleElements();
+  buildRoleList();
+</script>
+</body>
+</html>
